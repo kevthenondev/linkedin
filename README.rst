@@ -37,8 +37,8 @@ To run crawler
 ::
 
     $ python linkedin.py crawl me@email.com list_of_names.csv dump_profiles_here.csv --browser=firefox
-
-
+OR
+    $ python linkedin.py crawlexperience me@email.com list_of_urls.csv dump_profiles_here.csv --browser=firefox
 
 
 ======
