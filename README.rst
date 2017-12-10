@@ -11,7 +11,7 @@ To install (Python 3)
 
     $ python -m venv venv
     $ ./venv/bin/pip install -r requirements.txt
-
+    
 Ubuntu
 
 ::
@@ -50,5 +50,6 @@ Environment 2017
 
 Download geckodriver and chromedriver (if you're using Chrome, otherwise, firefoxdriver)
 export PATH=$PATH:/path/to/your/driver
-Should have selinum installed
+Should have selenium installed
 
+To get this to work on python2, you'll need to fix the encoding when writing to the csv. Everything else seems to work.
