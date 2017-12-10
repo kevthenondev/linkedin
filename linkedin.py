@@ -21,8 +21,7 @@ import click
 import getpass
 import keyring
 from selenium import webdriver
-from selenium.common.exceptions import (WebDriverException,
-                                        NoSuchElementException)
+from selenium.common.exceptions import (WebDriverException, NoSuchElementException)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -72,7 +71,7 @@ class WebBus:
         if _type is UnknownBrowserException:
             click.echo("Please use either Firefox, PhantomJS or Chrome")
             return False
-        print('__exit__, dirver close')
+        print('__exit__, driver close')
         self.driver.close()
 
 
@@ -92,6 +91,7 @@ def login_into_linkedin(driver, username):
     """
     Just login to linkedin if it is not already loggedin
     """
+    # print('starting login')
     userfield = driver.find_element_by_id('login-email')
     passfield = driver.find_element_by_id('login-password')
 
@@ -101,6 +101,8 @@ def login_into_linkedin(driver, username):
 
     # If we have login page we get these fields
     # I know it's a hack but it works
+    # print('starting login entry')
+
     if userfield and passfield:
         userfield.send_keys(username)
         passfield.send_keys(password)
@@ -124,7 +126,6 @@ def login_in_the_middle(driver, username):
         submit_form.submit()
         click.echo("Logging in")
 
-
 def collect_names(filepath):
     """
     collect names from the file given
@@ -134,6 +135,17 @@ def collect_names(filepath):
         # names = [line.strip() for line in _file.readlines()]
         names = [line[:-1] + ' in people' for line in _file.readlines()]
     return names
+
+        
+def collect_urls(filepath):
+    """
+    collect urls from the file given
+    """
+    items = []
+    with open(filepath, 'r') as _file:
+        # names = [line.strip() for line in _file.readlines()]
+        items = [line[:-1] + '' for line in _file.readlines()]
+    return items
 
 
 @click.group()
@@ -168,7 +180,7 @@ def crawl(browser, username, infile, outfile):
     # then check we can write the output file
     # we don't want to complete process and show error about not
     # able to write outputs
-    with open(outfile, 'w') as csvfile:
+    with open(outfile, 'w', newline='') as csvfile:
         # just write headers now
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -222,11 +234,13 @@ def crawl(browser, username, infile, outfile):
                         print('links failed', NoSuchElementException)
                     links = [link.get_attribute('href') for link in links]
                     # print('links:',links)
-                    with open(outfile, 'a+') as csvfile:
+                    with open(outfile, 'a+', newline='') as csvfile:
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                         for link in links:
                             # every search result
                             print('link:',link)
+                            time.sleep(random.uniform(0.2, 7))
+
                             bus.driver.get(link)
                             # Might need to login in the middle
                             # try:
@@ -301,6 +315,139 @@ def crawl(browser, username, infile, outfile):
                         click.echo("Obtained ..." + name)
 
 @click.command()
+@click.option('--browser', default='phantomjs', help='Browser to run with')
+@click.argument('username')
+@click.argument('infile')
+@click.argument('outfile')                        
+def crawlexperience(browser, username, infile, outfile):
+    """
+    Run this crawler with specified username
+    """
+
+    # first check and read the input file
+    links = collect_urls(infile)   #get urls from file - could make a single smarter file reader proc
+
+    fieldnames = ['url', 'name', 'title','company', 'dateRange', 'location']
+    # then check we can write the output file
+    # we don't want to complete process and show error about not
+    # able to write outputs
+    with open(outfile, 'w', newline='') as csvfile:
+        # just write headers now
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+    
+    link_title = './/a[@class="search-result__result-link"]'
+
+    # now open the browser
+
+    with WebBus(browser) as bus:
+        bus.driver.get(LINKEDIN_URL)
+
+        login_into_linkedin(bus.driver, username)
+        # print('Logged in')
+        # print('Survived sleep')
+        with open(outfile, 'a+', newline='') as csvfile:
+            # print('Starting writer')
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            for link in links:
+                profiles = []
+                # time.sleep(random.uniform(0.2, 7))
+                # every search result
+                print('link:',link)
+                
+                bus.driver.get(link)
+                # login_in_the_middle(bus.driver, username)
+                experienceBlock = None
+                experiences = None
+                                
+                # scroll down to open experience
+                last_height = bus.driver.execute_script("return document.body.scrollHeight")
+                # print('Scrolling to bottom')
+                while True:
+                    bus.driver.execute_script("window.scrollBy(0, +300);")
+                    # Wait to load page
+                    time.sleep(random.uniform(1, 2))
+                    bus.driver.execute_script("window.scrollBy(0, +300);")
+                    # Wait to load page
+                    time.sleep(random.uniform(1, 2))
+                    bus.driver.execute_script("window.scrollBy(0, +300);")
+
+                    # Calculate new scroll height and compare with last scroll height
+                    new_height = bus.driver.execute_script("return document.body.scrollHeight")
+                    if new_height == last_height:
+                        break
+                    last_height = new_height
+
+                #limit to experience block so we don't mess with education dropdowns
+                try:                                        
+                    experienceBlock = bus.driver.find_element_by_class_name('experience-section')
+                    # print('Experience Block: ', experienceBlock)
+                except NoSuchElementException:
+                    click.echo("No experience section skipping this user")
+                    continue
+
+                name = bus.driver.find_element_by_class_name('pv-top-card-section__name')
+                # print('Name: ', name.text)                
+                    
+                #scroll back to inline expansion and click on it                    
+                while True:   
+                    try:    
+                        element = experienceBlock.find_element_by_class_name('pv-profile-section__see-more-inline')
+                        # print('Found an inline expansion: scrolling back to click on it')
+                        bus.driver.execute_script("return arguments[0].scrollIntoView();", element)
+                        # print('Scrolled to element')
+                        bus.driver.execute_script("window.scrollBy(0, -150);")
+                        # print('About to click')
+                        bus.driver.find_element_by_class_name('pv-profile-section__toggle-detail-icon').click()
+                        # Wait to load page
+                        time.sleep(random.uniform(1, 2))
+                    except NoSuchElementException:
+                        click.echo("No expand element found")
+                        # continue                    
+                    try:
+                        moreInline = experienceBlock.find_element_by_class_name('pv-profile-section__see-more-inline')
+                    except NoSuchElementException:
+                        break
+
+
+                experiences = experienceBlock.find_elements_by_class_name('pv-entity__summary-info')
+                # print('Experiences:',experiences)
+                        
+                for experience in experiences:
+                    # print('Parsing titles')
+
+                    title = experience.find_element_by_tag_name('h3');
+                    # print(title.text)
+                    company = experience.find_element_by_class_name('pv-entity__secondary-title');
+                    # print(company.text)
+                    try:
+                        dateRange = experience.find_element_by_class_name('pv-entity__date-range');
+                        dateData = dateRange.text.splitlines()[1]
+                    except NoSuchElementException:
+                        click.echo("No date range data")
+                        dateData = 'None'
+                        # continue                        
+                    try:
+                        location = experience.find_element_by_class_name('pv-entity__location');
+                        locationData = location.text.splitlines()[1]
+                    except NoSuchElementException:
+                        click.echo("No location data")
+                        locationData = 'None'
+                        # continue
+                        # print('Allocated title data')
+                    # print('Title text: ',title)
+                    # print('Title text: ',title.text)
+
+                    # print('Creating data entry')
+                    data = {'url': link, 'name': name.text,
+                        'title': title.text, 'company': company.text, 'dateRange': dateData, 'location': locationData}
+                    # print('Data: ',data)
+                    profiles.append(data)
+                    # print(profiles)
+                writer.writerows(profiles)
+                click.echo("Obtained ..." + link)
+
+@click.command()
 @click.argument('username')
 def store(username):
     """
@@ -312,6 +459,7 @@ def store(username):
 
 
 cli.add_command(crawl)
+cli.add_command(crawlexperience)
 cli.add_command(store)
 
 
