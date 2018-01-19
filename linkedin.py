@@ -349,9 +349,10 @@ def crawlexperience(browser, username, infile, outfile):
         with open(outfile, 'a+', newline='') as csvfile:
             # print('Starting writer')
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            time.sleep(random.uniform(10, 10))   #setup break to manually login
+ 
             for link in links:
                 profiles = []
-                # time.sleep(random.uniform(0.2, 7))
                 # every search result
                 print('link:',link)
                 
@@ -439,8 +440,12 @@ def crawlexperience(browser, username, infile, outfile):
                     # print('Title text: ',title.text)
 
                     # print('Creating data entry')
-                    data = {'url': link, 'name': name.text,
-                        'title': title.text, 'company': company.text, 'dateRange': dateData, 'location': locationData}
+                    data = {'url': link.encode('ascii', 'ignore').decode('utf-8'),
+                                'name': name.text.encode('ascii', 'ignore').decode('utf-8'),
+                                'title': title.text.encode('ascii', 'ignore').decode('utf-8'),
+                                'company': company.text.encode('ascii', 'ignore').decode('utf-8'),
+                                'dateRange': dateData.encode('ascii', 'ignore').decode('utf-8'),
+                                'location': locationData.encode('ascii', 'ignore').decode('utf-8')}
                     # print('Data: ',data)
                     profiles.append(data)
                     # print(profiles)
