@@ -1,5 +1,5 @@
-Linkedin Web Search
-===================
+Linkedin Web Search and Experience Crawler
+==========================================
 
 WIP
 ---
@@ -37,12 +37,13 @@ To run crawler
 ::
 
     $ python linkedin.py crawl me@email.com list_of_names.csv dump_profiles_here.csv --browser=firefox
+(this comes from previous fork)
 OR
 
 ::
 
     $ python linkedin.py crawlexperience me@email.com list_of_urls.csv dump_profiles_here.csv --browser=firefox
-
+(this was added after the fork)
 
 ======
 
