@@ -42,7 +42,7 @@ OR
 
 ::
 
-    $ python linkedin.py crawlexperience me@email.com list_of_urls.csv dump_profiles_here.csv --browser=firefox
+    $ python linkedin.py crawlexperience me@email.com list_of_urls.csv list_of_random_urls.csv dump_profiles_here.csv --browser=firefox
 (this was added after the fork)
 
 ======
