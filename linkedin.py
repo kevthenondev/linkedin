@@ -31,7 +31,7 @@ import random
 
 LINKEDIN_URL = 'https://www.linkedin.com'
 INITIAL_PAGE_NUMBER = 1
-MAX_PAGE_NUMBER = 15
+MAX_PAGE_NUMBER = 1
 
 class UnknownUserException(Exception):
     pass
@@ -133,7 +133,7 @@ def collect_names(filepath):
     names = []
     with open(filepath, 'r') as _file:
         # names = [line.strip() for line in _file.readlines()]
-        names = [line[:-1] + ' in people' for line in _file.readlines()]
+        names = [line[:-1] for line in _file.readlines()]
     return names
 
         
@@ -176,7 +176,7 @@ def crawl(browser, username, infile, outfile):
     # first check and read the input file
     all_names = collect_names(infile)
 
-    fieldnames = ['occupation','courses_list']
+    fieldnames = ['name', 'url']
     # then check we can write the output file
     # we don't want to complete process and show error about not
     # able to write outputs
@@ -185,147 +185,90 @@ def crawl(browser, username, infile, outfile):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
-    link_title = './/a[@class="search-result__result-link"]'
 
     # now open the browser
     with WebBus(browser) as bus:
+
         bus.driver.get(LINKEDIN_URL)
 
         login_into_linkedin(bus.driver, username)
+        time.sleep(random.uniform(15, 30))
 
         for name in all_names:
-            click.echo("Getting ...")
-            print(name)
+            links = []
             try:
                 search_input = bus.driver.find_element_by_css_selector('.ember-view input')
+                print('Found search box')
+                time.sleep(random.uniform(2, 5))
             except NoSuchElementException:
                 print('NoSuchElementException search_input')
                 continue
+            search_input.clear()
             search_input.send_keys(name)
+            print('Input name: ', name)
+            time.sleep(random.uniform(2, 5))
             try:
-                # search_form = bus.driver.find_element_by_class_name('nav-search')
-                # print('search_form:',search_form)
-                # search_form.submit()
                 bus.driver.find_element_by_css_selector('.search-typeahead-v2__button').click()
+                print('Clicked search')
+                time.sleep(random.uniform(2, 5))
             except NoSuchElementException:
-                print('click search button failes')
+                print('Click search button fails')
 
             profiles = []
 
             # collect all the profile links
             results = None
+##            try:
+##                results = WebDriverWait(bus.driver, 10).until(
+##                    EC.presence_of_element_located((By.CSS_SELECTOR, ".search-results__primary-cluster"))
+##                )
+##            finally:
+            # run through pages
+            print('Current URL: ', bus.driver.current_url)
+
+##            url = bus.driver.current_url + "&page=1"
+##                for i in range(INITIAL_PAGE_NUMBER, MAX_PAGE_NUMBER):
+##                    page_url = re.sub(r"&page=\d+", "&page=" + str(i), url)
+##                    bus.driver.get(page_url)
+##                    print('Page: ',i)
+##                
             try:
-                results = WebDriverWait(bus.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, ".search-results__primary-cluster"))
-                )
-            finally:
-                # run through pages
-                print(bus.driver.current_url)
+                links = bus.driver.find_elements_by_css_selector(".search-result__info .search-result__result-link")
+            except NoSuchElementException:
+                print('Links failed', NoSuchElementException)
+            links = [link.get_attribute('href') for link in links]
+            print('Links:', links)
+            if links != []:
+                with open(outfile, 'a+', newline='') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    for link in links:
+                        # every search result
+                        print('Link:', link)
+##                        time.sleep(random.uniform(0.2, 2))
 
-                url = bus.driver.current_url + "&page=1"
-                for i in range(INITIAL_PAGE_NUMBER, MAX_PAGE_NUMBER):
-                    page_url = re.sub(r"&page=\d+", "&page=" + str(i), url)
-                    bus.driver.get(page_url)
-
-                
-                    try:
-                        links = bus.driver.find_elements_by_css_selector(".search-result__info .search-result__result-link")
-                    except NoSuchElementException:
-                        print('links failed', NoSuchElementException)
-                    links = [link.get_attribute('href') for link in links]
-                    # print('links:',links)
-                    with open(outfile, 'a+', newline='') as csvfile:
-                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                        for link in links:
-                            # every search result
-                            print('link:',link)
-                            time.sleep(random.uniform(0.2, 7))
-
-                            bus.driver.get(link)
-                            # Might need to login in the middle
-                            # try:
-                            #     login_into_linkedin(bus.driver, username)
-                            #     print('login again')
-                            #     bus.driver.get(link)
-                            # except:
-                            #     pass
-
-                            accomplishments = None
-
-                            # scorll down to get accomplishment
-                            # Get scroll height
-                            last_height = bus.driver.execute_script("return document.body.scrollHeight")
-
-                            while True:
-                                # Scroll down to bottom
-                                bus.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-                                # Wait to load page
-                                time.sleep(random.uniform(0.2, 7))
-
-                                # Calculate new scroll height and compare with last scroll height
-                                new_height = bus.driver.execute_script("return document.body.scrollHeight")
-                                if new_height == last_height:
-                                    break
-                                last_height = new_height
-
-                            try:
-                                # results = WebDriverWait(bus.driver, 10).until(
-                                #     EC.presence_of_element_located((By.CSS_SELECTOR, ".pv-accomplishments-block__content"))
-                                # )
-                                accomplishments = bus.driver.find_elements_by_class_name('pv-accomplishments-block__content')
-                            except NoSuchElementException:
-                                click.echo("No accomplishments section skipping this user")
-                                continue
-                            print('accomplishments:',accomplishments)
-                            for accomplishment in accomplishments:
-                                title = accomplishment.find_element_by_class_name('pv-accomplishments-block__title');
-                                print('text:',title.text)
-                                if  title.text != 'Courses':
-                                    continue
-                                
-                                print('Courses')
-                                try:
-                                    accomplishment.find_element_by_class_name('.svg-icon-wrap').click()
-                                    print(accomplishment.find_element_by_class_name('pv-profile-section__see-more-inline'))
-                                    while (accomplishment.find_element_by_class_name('pv-profile-section__see-more-inline')):
-                                        accomplishment.find_element_by_class_name('pv-profile-section__see-more-inline').click();
-                                    courses = accomplishment.find_elements_by_class_name('pv-accomplishments-block__list li')
-
-                                except NoSuchElementException:
-                                    print('no svg-icon-wrap')
-                                    courses = accomplishment.find_elements_by_css_selector('.pv-accomplishments-block__summary-list li')
-                                    
-
-                                if courses:
-                                    courses_list = []
-                                    # collect all course names
-                                    for course in courses:
-                                        courses_list.append(course.text)
-                                    data = {
-                                        'occupation': bus.driver.find_element_by_class_name('pv-top-card-section__headline').text,
-                                        'courses_list': courses_list,
-                                    }
-                                    print(data)
-                                    profiles.append(data)
-                                    writer.writerows(profiles)
-                                else:
-                                    print('no class!')
-
-                        click.echo("Obtained ..." + name)
+                        data = {'name': name, 'url': link}
+                        print(data)
+                        profiles.append(data)
+                        writer.writerows(profiles)
+                click.echo("Obtained: " + name)
+            else:
+                print("Not found: " + name)
+            time.sleep(random.uniform(2, 5))
 
 @click.command()
 @click.option('--browser', default='phantomjs', help='Browser to run with')
 @click.argument('username')
 @click.argument('infile')
+@click.argument('inrandomfile')
 @click.argument('outfile')                        
-def crawlexperience(browser, username, infile, outfile):
+def crawlexperience(browser, username, infile, inrandomfile, outfile):
     """
     Run this crawler with specified username
     """
 
     # first check and read the input file
     links = collect_urls(infile)   #get urls from file - could make a single smarter file reader proc
+    randomsites = collect_urls(inrandomfile)   #get urls from file - could make a single smarter file reader proc
 
     fieldnames = ['url', 'name', 'title','company', 'dateRange', 'location']
     # then check we can write the output file
@@ -340,38 +283,71 @@ def crawlexperience(browser, username, infile, outfile):
 
     # now open the browser
 
-    with WebBus(browser) as bus:
-        bus.driver.get(LINKEDIN_URL)
 
+    with WebBus(browser) as bus:
+##        driver = webdriver.Firefox()
+##        driver = webdriver.Remote(command_executor="http://127.0.0.1:59456",desired_capabilities={})
+##        driver.session_id = '6efbea68-f5ec-4b7f-8470-0c966e96f545'
+     
+        print(bus.driver.command_executor._url)
+        print(bus.driver.session_id)
+
+##        bus.driver = driver
+
+        bus.driver.get(LINKEDIN_URL)
+        
         login_into_linkedin(bus.driver, username)
-        # print('Logged in')
+        print('Logged in')
+        time.sleep(random.uniform(60, 60))   #setup break to manually login
         # print('Survived sleep')
         with open(outfile, 'a+', newline='') as csvfile:
             # print('Starting writer')
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            time.sleep(random.uniform(10, 10))   #setup break to manually login
- 
+            time.sleep(random.uniform(5, 15))   #setup break to manually login
+            i=0
             for link in links:
+                i=i+1
+##                randomsite = randomsites[int(random.uniform(0, 500))]
+##                print('Random site: ', str(randomsite))
+##                bus.driver.get(str(randomsite))
+                time.sleep(random.uniform(60, 120))   #setup break to manually login
                 profiles = []
                 # every search result
-                print('link:',link)
+                print('Link ', str(i) +': '+ link)
                 
                 bus.driver.get(link)
                 # login_in_the_middle(bus.driver, username)
                 experienceBlock = None
                 experiences = None
-                                
+
+                try:
+                    bus.driver.find_element_by_class_name('profile-unavailable')
+                    print('Profile is unavailable')
+##                    randomsite = randomsites[int(random.uniform(0, 500))]
+##                    print('Random site: ', str(randomsite))
+##                    bus.driver.get(str(randomsite))
+                    time.sleep(random.uniform(30, 60))   #setup break to manually login
+                    bus.driver.get(link)
+                except NoSuchElementException:
+                    print('Profile found')
+                
                 # scroll down to open experience
                 last_height = bus.driver.execute_script("return document.body.scrollHeight")
                 # print('Scrolling to bottom')
                 while True:
-                    bus.driver.execute_script("window.scrollBy(0, +300);")
+                    bus.driver.execute_script("window.scrollBy(0, +"+str(int(random.uniform(1000,1500)))+");")
                     # Wait to load page
                     time.sleep(random.uniform(1, 2))
-                    bus.driver.execute_script("window.scrollBy(0, +300);")
+                    bus.driver.execute_script("window.scrollBy(0, -"+str(int(random.uniform(1000,1500)))+");")
                     # Wait to load page
                     time.sleep(random.uniform(1, 2))
-                    bus.driver.execute_script("window.scrollBy(0, +300);")
+                    bus.driver.execute_script("window.scrollBy(0, +"+str(int(random.uniform(200,400)))+");")
+                    # Wait to load page
+                    time.sleep(random.uniform(1, 2))
+                    bus.driver.execute_script("window.scrollBy(0, +"+str(int(random.uniform(200,400)))+");")
+                    # Wait to load page
+                    time.sleep(random.uniform(1, 2))
+                    bus.driver.execute_script("window.scrollBy(0, +"+str(int(random.uniform(200,400)))+");")
 
                     # Calculate new scroll height and compare with last scroll height
                     new_height = bus.driver.execute_script("return document.body.scrollHeight")
@@ -425,14 +401,14 @@ def crawlexperience(browser, username, infile, outfile):
                         dateRange = experience.find_element_by_class_name('pv-entity__date-range');
                         dateData = dateRange.text.splitlines()[1]
                     except NoSuchElementException:
-                        click.echo("No date range data")
+##                        click.echo("No date range data")
                         dateData = 'None'
                         # continue                        
                     try:
                         location = experience.find_element_by_class_name('pv-entity__location');
                         locationData = location.text.splitlines()[1]
                     except NoSuchElementException:
-                        click.echo("No location data")
+##                        click.echo("No location data")
                         locationData = 'None'
                         # continue
                         # print('Allocated title data')
@@ -440,7 +416,7 @@ def crawlexperience(browser, username, infile, outfile):
                     # print('Title text: ',title.text)
 
                     # print('Creating data entry')
-                    data = {'url': link.encode('ascii', 'ignore').decode('utf-8'),
+                    data = {'url': bus.driver.current_url,
                                 'name': name.text.encode('ascii', 'ignore').decode('utf-8'),
                                 'title': title.text.encode('ascii', 'ignore').decode('utf-8'),
                                 'company': company.text.encode('ascii', 'ignore').decode('utf-8'),
