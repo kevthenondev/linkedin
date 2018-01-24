@@ -32,17 +32,22 @@ To store password in keychain
     Password: **
 
 
-To run crawler
+To run:
 
 ::
 
     $ python linkedin.py crawl me@email.com list_of_names.csv dump_profiles_here.csv --browser=firefox
-(this comes from previous fork)
+(this comes from previous fork but is adjusted to get just the first page of links)
 OR
 
 ::
 
     $ python linkedin.py crawlexperience me@email.com list_of_urls.csv list_of_random_urls.csv dump_profiles_here.csv --browser=firefox
+(this was added after the fork)
+OR
+::
+
+    $ python linkedin.py crawlgoogle me@email.com list_of_companies.csv --browser=firefox
 (this was added after the fork)
 
 ======
