@@ -47,7 +47,7 @@ OR
 OR
 ::
 
-    $ python linkedin.py crawlgoogle me@email.com list_of_companies.csv --browser=firefox
+    $ python linkedin.py crawlgoogle list_of_companies.csv --browser=firefox
 (this was added after the fork)
 
 ======
