@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Simple Linkedin crawler to collect user's  profile data.
-
-@author: idwaker
+Simple Linkedin crawler to interate through a list of urls, pausing to allow a break so that I can browse the page to ensure it the correct one. The file copies the experience as proof that the person is the correct one (as the current job may not be the identifying company). It also has a method to find unlinked founders so I can pass the link back to techireland so that they can link to the linkedin profiles on their website. Finally, a basic google search is iterated to do a quick desktop search for missing founders. Basically, all this does is saves me from using copy-paste into the url so often. Limited automation of pasting links into the browser so I can focus on reading the pages.
+.
 
 To use this you need linkedin account, all search is done through your account
 
@@ -21,6 +20,7 @@ import click
 import getpass
 import keyring
 from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import (WebDriverException, NoSuchElementException)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -31,7 +31,7 @@ import random
 
 LINKEDIN_URL = 'https://www.linkedin.com'
 INITIAL_PAGE_NUMBER = 1
-MAX_PAGE_NUMBER = 1
+MAX_PAGE_NUMBER = 1  # I turned this off - if I can't find the right person in 1 page, they're too difficult to find
 
 class UnknownUserException(Exception):
     pass
@@ -166,7 +166,7 @@ def cli():
 @click.command()
 @click.option('--browser', default='phantomjs', help='Browser to run with')
 @click.argument('username')
-@click.argument('infile')
+@click.argument('infile')   #this file has the name and company in a string - should only be one or two possibilities that are the correct profile that techireland needs to display
 @click.argument('outfile')
 def crawl(browser, username, infile, outfile):
     """
@@ -176,7 +176,7 @@ def crawl(browser, username, infile, outfile):
     # first check and read the input file
     all_names = collect_names(infile)
 
-    fieldnames = ['name', 'url']
+    fieldnames = ['Search name', 'Name', 'URL']
     # then check we can write the output file
     # we don't want to complete process and show error about not
     # able to write outputs
@@ -192,10 +192,11 @@ def crawl(browser, username, infile, outfile):
         bus.driver.get(LINKEDIN_URL)
 
         login_into_linkedin(bus.driver, username)
-        time.sleep(random.uniform(15, 30))
+        time.sleep(random.uniform(30, 60))
 
         for name in all_names:
             links = []
+            nametexts = []
             try:
                 search_input = bus.driver.find_element_by_css_selector('.ember-view input')
                 print('Found search box')
@@ -210,47 +211,50 @@ def crawl(browser, username, infile, outfile):
             try:
                 bus.driver.find_element_by_css_selector('.search-typeahead-v2__button').click()
                 print('Clicked search')
-                time.sleep(random.uniform(2, 5))
+                time.sleep(random.uniform(5, 10))
             except NoSuchElementException:
                 print('Click search button fails')
 
             profiles = []
 
-            # collect all the profile links
+            # collect the profile links - later I'll iterate through the experience to decide which is the right one
             results = None
-##            try:
-##                results = WebDriverWait(bus.driver, 10).until(
-##                    EC.presence_of_element_located((By.CSS_SELECTOR, ".search-results__primary-cluster"))
-##                )
-##            finally:
-            # run through pages
             print('Current URL: ', bus.driver.current_url)
-
-##            url = bus.driver.current_url + "&page=1"
-##                for i in range(INITIAL_PAGE_NUMBER, MAX_PAGE_NUMBER):
-##                    page_url = re.sub(r"&page=\d+", "&page=" + str(i), url)
-##                    bus.driver.get(page_url)
-##                    print('Page: ',i)
-##                
+            
             try:
                 links = bus.driver.find_elements_by_css_selector(".search-result__info .search-result__result-link")
             except NoSuchElementException:
                 print('Links failed', NoSuchElementException)
+
             links = [link.get_attribute('href') for link in links]
             print('Links:', links)
             if links != []:
+                i = 0
+                try:
+                    nametexts = bus.driver.find_elements_by_css_selector("span.name.actor-name")
+                    nametexts = [nametext.text for nametext in nametexts]
+                except NoSuchElementException:
+
+                    print('Name texts failed', NoSuchElementException)
+                while len(links)>len(nametexts):
+                    nametexts.append("No name found")
+                    print('Appended name')
+                    
+                print('Name texts:', nametexts[i])
                 with open(outfile, 'a+', newline='') as csvfile:
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     for link in links:
                         # every search result
-                        print('Link:', link)
+                        print('Link: ', link)
+                        print('Name text: ', nametexts[i])
 ##                        time.sleep(random.uniform(0.2, 2))
 
-                        data = {'name': name, 'url': link}
+                        data = {'Search name': name.encode('ascii', 'ignore').decode('utf-8'), 'Name': nametexts[i].encode('ascii', 'ignore').decode('utf-8'), 'URL': link}
                         print(data)
                         profiles.append(data)
-                        writer.writerows(profiles)
-                click.echo("Obtained: " + name)
+                        i = i + 1
+                    writer.writerows(profiles)
+                click.echo("Checked: " + name)
             else:
                 print("Not found: " + name)
             time.sleep(random.uniform(2, 5))
@@ -268,9 +272,9 @@ def crawlexperience(browser, username, infile, inrandomfile, outfile):
 
     # first check and read the input file
     links = collect_urls(infile)   #get urls from file - could make a single smarter file reader proc
-    randomsites = collect_urls(inrandomfile)   #get urls from file - could make a single smarter file reader proc
+##    randomsites = collect_urls(inrandomfile)   #get urls from file - used to make sure I'm not getting mixed up between profiles
 
-    fieldnames = ['url', 'name', 'title','company', 'dateRange', 'location']
+    fieldnames = ['Number', 'Link', 'Resolved URL', 'Name', 'Title','Company', 'Date Range', 'Location']
     # then check we can write the output file
     # we don't want to complete process and show error about not
     # able to write outputs
@@ -279,10 +283,7 @@ def crawlexperience(browser, username, infile, inrandomfile, outfile):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
     
-    link_title = './/a[@class="search-result__result-link"]'
-
     # now open the browser
-
 
     with WebBus(browser) as bus:
 ##        driver = webdriver.Firefox()
@@ -310,10 +311,10 @@ def crawlexperience(browser, username, infile, inrandomfile, outfile):
 ##                randomsite = randomsites[int(random.uniform(0, 500))]
 ##                print('Random site: ', str(randomsite))
 ##                bus.driver.get(str(randomsite))
-                time.sleep(random.uniform(60, 120))   #setup break to manually login
+                time.sleep(random.uniform(30, 60))   #setup break to manually browse current page including login page
                 profiles = []
                 # every search result
-                print('Link ', str(i) +': '+ link)
+                print('Link ', str(i) + ': '+ link)
                 
                 bus.driver.get(link)
                 # login_in_the_middle(bus.driver, username)
@@ -326,13 +327,14 @@ def crawlexperience(browser, username, infile, inrandomfile, outfile):
 ##                    randomsite = randomsites[int(random.uniform(0, 500))]
 ##                    print('Random site: ', str(randomsite))
 ##                    bus.driver.get(str(randomsite))
-                    time.sleep(random.uniform(30, 60))   #setup break to manually login
+                    time.sleep(random.uniform(15, 30))   #setup break to manually login
                     bus.driver.get(link)
                 except NoSuchElementException:
                     print('Profile found')
                 
-                # scroll down to open experience
+                # scroll down to open experience so I can look for the techireland company
                 last_height = bus.driver.execute_script("return document.body.scrollHeight")
+                time.sleep(random.uniform(30, 60))   #setup break to manually login
                 # print('Scrolling to bottom')
                 while True:
                     bus.driver.execute_script("window.scrollBy(0, +"+str(int(random.uniform(1000,1500)))+");")
@@ -355,7 +357,7 @@ def crawlexperience(browser, username, infile, inrandomfile, outfile):
                         break
                     last_height = new_height
 
-                #limit to experience block so we don't mess with education dropdowns
+                #get the experience block as proof - too complicated to get just the right company as it's name may vary slightly (e.g. include Limited, Ltd. Group etc)
                 try:                                        
                     experienceBlock = bus.driver.find_element_by_class_name('experience-section')
                     # print('Experience Block: ', experienceBlock)
@@ -416,17 +418,43 @@ def crawlexperience(browser, username, infile, inrandomfile, outfile):
                     # print('Title text: ',title.text)
 
                     # print('Creating data entry')
-                    data = {'url': bus.driver.current_url,
-                                'name': name.text.encode('ascii', 'ignore').decode('utf-8'),
-                                'title': title.text.encode('ascii', 'ignore').decode('utf-8'),
-                                'company': company.text.encode('ascii', 'ignore').decode('utf-8'),
-                                'dateRange': dateData.encode('ascii', 'ignore').decode('utf-8'),
-                                'location': locationData.encode('ascii', 'ignore').decode('utf-8')}
+                    data = {'Number': i, 'Link': link, 'Resolved URL': bus.driver.current_url,
+                                'Name': name.text.encode('ascii', 'ignore').decode('utf-8'),
+                                'Title': title.text.encode('ascii', 'ignore').decode('utf-8'),
+                                'Company': company.text.encode('ascii', 'ignore').decode('utf-8'),
+                                'Date Range': dateData.encode('ascii', 'ignore').decode('utf-8'),
+                                'Location': locationData.encode('ascii', 'ignore').decode('utf-8')}
                     # print('Data: ',data)
                     profiles.append(data)
                     # print(profiles)
                 writer.writerows(profiles)
-                click.echo("Obtained ..." + link)
+                click.echo("Checked: " + link)
+
+@click.command()
+@click.option('--browser', default='phantomjs', help='Browser to run with')
+@click.argument('infile')               
+def crawlgoogle(browser, infile):
+    """
+    Run this crawler with specified username
+    """
+
+    # first check and read the input file
+    searches = collect_urls(infile)   #get urls from file - could make a single smarter file reader proc
+
+    # now open the browser
+    with WebBus(browser) as bus:
+     
+        time.sleep(random.uniform(5, 15))   #setup break to manually login
+        i=0
+        for search in searches:
+            i=i+1
+            bus.driver.get("https://www.google.com");
+            click.echo("Searching: " + str(i) + search)
+            bus.driver.find_element_by_id("lst-ib").send_keys('"'+search+'"')
+            time.sleep(random.uniform(3, 5))
+            bus.driver.find_element_by_id("lst-ib").send_keys(Keys.RETURN)
+            time.sleep(random.uniform(45, 45))   #setup break to manually login
+
 
 @click.command()
 @click.argument('username')
@@ -441,6 +469,7 @@ def store(username):
 
 cli.add_command(crawl)
 cli.add_command(crawlexperience)
+cli.add_command(crawlgoogle)
 cli.add_command(store)
 
 
